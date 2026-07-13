@@ -8,8 +8,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'banchan_ultra_secret_key_2026')
 DB_FILE = 'clock_system.db'
 
-# 📍 [필수 변경] 매장 와이파이 이름 (대소문자 구분 필수)
-STORE_WIFI_NAME = "home_5G" 
+# 📍 매장 와이파이 이름 (필요시 대소문자 맞춰 변경)
+STORE_WIFI_NAME = "Banchan_Co_5G" 
 
 # 2주 정산 기준점: 2026년 1월 7일 (수요일)
 ANCHOR_DATE = datetime.date(2026, 1, 7)
@@ -68,15 +68,15 @@ def get_recent_pay_periods(n=6):
         periods.append((start, end))
     return sorted(periods, reverse=True)
 
-# --- 에러가 없는 완벽한 인라인 HTML 구조 정의 ---
-def render_page(content_html):
-    base_html = f"""
+# --- 컨텍스트 에러를 원천 차단하는 베이스 레이아웃 함수 ---
+def get_base_layout(content_html):
+    return f"""
     <!DOCTYPE html>
     <html lang="ko">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Banchan & Co. Staff</title>
+        <title>Banchan & Co. Portal</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col justify-between">
@@ -109,142 +109,6 @@ def render_page(content_html):
     </body>
     </html>
     """
-    return base_html
-
-LOGIN_HTML = render_page("""
-<div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-lg shadow-md border">
-    <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">직원 로그인</h2>
-    <form action="{{ url_for('login') }}" method="POST" class="space-y-4">
-        <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-1">아이디</label>
-            <input type="text" name="username" required class="w-full p-2.5 border rounded focus:ring-2 focus:ring-indigo-500 outline-none">
-        </div>
-        <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-1">비밀번호</label>
-            <input type="password" name="password" required class="w-full p-2.5 border rounded focus:ring-2 focus:ring-indigo-500 outline-none">
-        </div>
-        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition">로그인</button>
-    </form>
-</div>
-""")
-
-DASHBOARD_HTML = render_page("""
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-white p-6 rounded-lg shadow border md:col-span-1 text-center flex flex-col justify-between">
-        <div>
-            <h3 class="text-lg font-bold mb-2">근무 상태</h3>
-            <div class="inline-block px-4 py-2 rounded-full text-sm font-bold mb-4 
-                {% if current_status == '근무 중' %} bg-green-100 text-green-700 {% else %} bg-gray-100 text-gray-600 {% endif %}">
-                {{ current_status }}
-            </div>
-        </div>
-        
-        <form action="{{ url_for('clock') }}" method="POST" id="clockForm" class="space-y-3">
-            {% if current_status == '퇴근함' or current_status == '기록 없음' %}
-                <button type="submit" name="action" value="in" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold rounded-lg shadow-lg">
-                    🚀 출근하기 (Clock In)
-                </button>
-            {% else %}
-                <button type="submit" name="action" value="out" class="w-full py-4 bg-red-600 hover:bg-red-700 text-white text-lg font-bold rounded-lg shadow-lg">
-                    🛑 퇴근하기 (Clock Out)
-                </button>
-            {% endif %}
-        </form>
-        {% if session.get('role') == 'admin' %}
-            <a href="{{ url_for('admin_dashboard') }}" class="block mt-4 text-sm text-indigo-600 hover:underline">👉 관리자 페이지</a>
-        {% endif %}
-    </div>
-
-    <div class="bg-white p-6 rounded-lg shadow border md:col-span-2">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-bold">내 근무 시간표</h3>
-            <span class="text-xs text-gray-500">정산주기: {{ period_start.strftime('%m/%d') }} ~ {{ period_end.strftime('%m/%d') }}</span>
-        </div>
-        <div class="bg-indigo-50 p-4 rounded-lg flex justify-between mb-6 text-sm">
-            <div>
-                <p class="text-gray-500">정산기간 누적</p>
-                <p class="text-xl font-bold text-indigo-700">{{ "%.2f"|format(total_hours) }} 시간</p>
-            </div>
-            <div class="text-right">
-                <p class="text-gray-500">예상 지급액 (시급: ${{ "%.2f"|format(hourly_rate) }})</p>
-                <p class="text-xl font-bold text-gray-800">${{ "%.2f"|format(total_pay) }}</p>
-            </div>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
-                    <tr>
-                        <th class="p-3">날짜</th>
-                        <th class="p-3">출근</th>
-                        <th class="p-3">퇴근</th>
-                        <th class="p-3 text-right">시간</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    {% for log in logs %}
-                    <tr>
-                        <td class="p-3 font-medium">{{ log.date }}</td>
-                        <td class="p-3 text-gray-600">{{ log.in_time }}</td>
-                        <td class="p-3 text-gray-600">{{ log.out_time or '근무중' }}</td>
-                        <td class="p-3 text-right font-semibold {% if not log.out_time %}text-green-600{% endif %}">
-                            {{ "%.2f"|format(log.hours) if log.hours else '-' }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-""")
-
-ADMIN_HTML = render_page("""
-<div class="mb-8 flex justify-between items-center">
-    <h2 class="text-2xl font-bold text-gray-800">🛠️ 관리자 대시보드</h2>
-    <a href="{{ url_for('dashboard') }}" class="text-sm bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">출퇴근 화면으로</a>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-white p-6 rounded-lg shadow border md:col-span-2">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-bold">정산 기간별 요약 (수 ~ 화)</h3>
-            <form method="GET" action="{{ url_for('admin_dashboard') }}" id="periodForm">
-                <select name="period" onchange="document.getElementById('periodForm').submit()" class="border p-1.5 text-sm rounded">
-                    {% for start, end in periods %}
-                        <option value="{{ start.strftime('%Y-%m-%d') }}" {% if start.strftime('%Y-%m-%d') == selected_period_str %}selected{% endif %}>
-                            {{ start.strftime('%Y/%m/%d') }} ~ {{ end.strftime('%Y/%m/%d') }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </form>
-        </div>
-        <table class="w-full text-sm text-left">
-            <thead class="bg-gray-100 text-gray-600 text-xs">
-                <tr><th class="p-3">직원 이름</th><th class="p-3">지정 시급</th><th class="p-3">총 근무 시간</th><th class="p-3 text-right">총 정산 급여</th></tr>
-            </thead>
-            <tbody class="divide-y">
-                {% for row in payroll_summary %}
-                <tr>
-                    <td class="p-3 font-bold">{{ row.full_name }}</td>
-                    <td class="p-3">${{ "%.2f"|format(row.hourly_rate) }}</td>
-                    <td class="p-3 font-semibold text-indigo-700">{{ "%.2f"|format(row.total_hours) }} hrs</td>
-                    <td class="p-3 text-right font-bold">${{ "%.2f"|format(row.total_pay) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="bg-white p-6 rounded-lg shadow border">
-        <h3 class="text-lg font-bold mb-4">직원 추가</h3>
-        <form action="{{ url_for('add_user') }}" method="POST" class="space-y-3">
-            <input type="text" name="username" placeholder="아이디" required class="w-full p-2 border text-sm rounded">
-            <input type="password" name="password" placeholder="비밀번호" required class="w-full p-2 border text-sm rounded">
-            <input type="text" name="full_name" placeholder="직원이름" required class="w-full p-2 border text-sm rounded">
-            <input type="number" step="0.01" name="hourly_rate" placeholder="시급 ($)" required class="w-full p-2 border text-sm rounded" value="15.00">
-            <button type="submit" class="w-full py-2 bg-indigo-600 text-white font-bold rounded">직원 등록</button>
-        </form>
-    </div>
-</div>
-""")
 
 @app.route('/')
 def index():
@@ -264,7 +128,24 @@ def login():
             session['role'] = user['role']
             return redirect(url_for('dashboard'))
         flash('로그인 실패', 'error')
-    return render_template_string(LOGIN_HTML)
+        
+    login_html = """
+    <div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-lg shadow-md border">
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">직원 로그인</h2>
+        <form action="{{ url_for('login') }}" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">아이디</label>
+                <input type="text" name="username" required class="w-full p-2.5 border rounded focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">비밀번호</label>
+                <input type="password" name="password" required class="w-full p-2.5 border rounded focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition">로그인</button>
+        </form>
+    </div>
+    """
+    return render_template_string(get_base_layout(login_html))
 
 @app.route('/logout')
 def logout():
@@ -311,8 +192,77 @@ def dashboard():
             'hours': hours
         })
         
+    dashboard_html = """
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow border md:col-span-1 text-center flex flex-col justify-between">
+            <div>
+                <h3 class="text-lg font-bold mb-2">근무 상태</h3>
+                <div class="inline-block px-4 py-2 rounded-full text-sm font-bold mb-4 
+                    {% if current_status == '근무 중' %} bg-green-100 text-green-700 {% else %} bg-gray-100 text-gray-600 {% endif %}">
+                    {{ current_status }}
+                </div>
+            </div>
+            
+            <form action="{{ url_for('clock') }}" method="POST" id="clockForm" class="space-y-3">
+                {% if current_status == '퇴근함' or current_status == '기록 없음' %}
+                    <button type="submit" name="action" value="in" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold rounded-lg shadow-lg">
+                        🚀 출근하기 (Clock In)
+                    </button>
+                {% else %}
+                    <button type="submit" name="action" value="out" class="w-full py-4 bg-red-600 hover:bg-red-700 text-white text-lg font-bold rounded-lg shadow-lg">
+                        🛑 퇴근하기 (Clock Out)
+                    </button>
+                {% endif %}
+            </form>
+            {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('admin_dashboard') }}" class="block mt-4 text-sm text-indigo-600 hover:underline">👉 관리자 페이지</a>
+            {% endif %}
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow border md:col-span-2">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">내 근무 시간표</h3>
+                <span class="text-xs text-gray-500">정산주기: {{ period_start.strftime('%m/%d') }} ~ {{ period_end.strftime('%m/%d') }}</span>
+            </div>
+            <div class="bg-indigo-50 p-4 rounded-lg flex justify-between mb-6 text-sm">
+                <div>
+                    <p class="text-gray-500">정산기간 누적</p>
+                    <p class="text-xl font-bold text-indigo-700">{{ "%.2f"|format(total_hours) }} 시간</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-gray-500">예상 지급액 (시급: ${{ "%.2f"|format(hourly_rate) }})</p>
+                    <p class="text-xl font-bold text-gray-800">${{ "%.2f"|format(total_pay) }}</p>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="p-3">날짜</th>
+                            <th class="p-3">출근</th>
+                            <th class="p-3">퇴근</th>
+                            <th class="p-3 text-right">시간</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        {% for log in logs %}
+                        <tr>
+                            <td class="p-3 font-medium">{{ log.date }}</td>
+                            <td class="p-3 text-gray-600">{{ log.in_time }}</td>
+                            <td class="p-3 text-gray-600">{{ log.out_time or '근무중' }}</td>
+                            <td class="p-3 text-right font-semibold {% if not log.out_time %}text-green-600{% endif %}">
+                                {{ "%.2f"|format(log.hours) if log.hours else '-' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    """
     return render_template_string(
-        DASHBOARD_HTML,
+        get_base_layout(dashboard_html),
         current_status=current_status,
         logs=processed_logs,
         period_start=period_start,
@@ -360,7 +310,60 @@ def admin_dashboard():
                 if log['clock_out']:
                     u_hours += (datetime.datetime.strptime(log['clock_out'], '%Y-%m-%d %H:%M:%S') - datetime.datetime.strptime(log['clock_in'], '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600.0
             payroll_summary.append({'full_name': user['full_name'], 'hourly_rate': user['hourly_rate'], 'total_hours': u_hours, 'total_pay': u_hours * user['hourly_rate']})
-    return render_template_string(ADMIN_HTML, periods=periods, selected_period_str=selected_period_str, payroll_summary=payroll_summary)
+            
+    admin_html = """
+    <div class="mb-8 flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-gray-800">🛠️ 관리자 대시보드</h2>
+        <a href="{{ url_for('dashboard') }}" class="text-sm bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">출퇴근 화면으로</a>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow border md:col-span-2">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">정산 기간별 요약 (수 ~ 화)</h3>
+                <form method="GET" action="{{ url_for('admin_dashboard') }}" id="periodForm">
+                    <select name="period" onchange="document.getElementById('periodForm').submit()" class="border p-1.5 text-sm rounded">
+                        {% for start, end in periods %}
+                            <option value="{{ start.strftime('%Y-%m-%d') }}" {% if start.strftime('%Y-%m-%d') == selected_period_str %}selected{% endif %}>
+                                {{ start.strftime('%Y/%m/%d') }} ~ {{ end.strftime('%Y/%m/%d') }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-100 text-gray-600 text-xs">
+                    <tr><th class="p-3">직원 이름</th><th class="p-3">지정 시급</th><th class="p-3">총 근무 시간</th><th class="p-3 text-right">총 정산 급여</th></tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for row in payroll_summary %}
+                    <tr>
+                        <td class="p-3 font-bold">{{ row.full_name }}</td>
+                        <td class="p-3">${{ "%.2f"|format(row.hourly_rate) }}</td>
+                        <td class="p-3 font-semibold text-indigo-700">{{ "%.2f"|format(row.total_hours) }} hrs</td>
+                        <td class="p-3 text-right font-bold">${{ "%.2f"|format(row.total_pay) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow border">
+            <h3 class="text-lg font-bold mb-4">직원 추가</h3>
+            <form action="{{ url_for('add_user') }}" method="POST" class="space-y-3">
+                <input type="text" name="username" placeholder="아이디" required class="w-full p-2 border text-sm rounded">
+                <input type="password" name="password" placeholder="비밀번호" required class="w-full p-2 border text-sm rounded">
+                <input type="text" name="full_name" placeholder="직원이름" required class="w-full p-2 border text-sm rounded">
+                <input type="number" step="0.01" name="hourly_rate" placeholder="시급 ($)" required class="w-full p-2 border text-sm rounded" value="15.00">
+                <button type="submit" class="w-full py-2 bg-indigo-600 text-white font-bold rounded">직원 등록</button>
+            </form>
+        </div>
+    </div>
+    """
+    return render_template_string(
+        get_base_layout(admin_html),
+        periods=periods,
+        selected_period_str=selected_period_str,
+        payroll_summary=payroll_summary
+    )
 
 @app.route('/admin/user/add', methods=['POST'])
 def add_user():
