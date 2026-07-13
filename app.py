@@ -8,8 +8,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'banchan_ultra_secret_key_2026')
 DB_FILE = 'clock_system.db'
 
-# 📍 [필수 변경] 사장님 가게의 와이파이 이름을 정확하게 입력하세요 (대소문자 구분)
-# 직원이 이 와이파이에 연결되어 있을 때만 출퇴근이 가능해집니다.
+# 📍 [필수 변경] 매장 와이파이 이름 (대소문자 구분 필수)
 STORE_WIFI_NAME = "home_5G" 
 
 # 2주 정산 기준점: 2026년 1월 7일 (수요일)
@@ -38,7 +37,6 @@ def init_db():
                 user_id INTEGER NOT NULL,
                 clock_in TEXT NOT NULL,
                 clock_out TEXT,
-                wifi_verified INTEGER DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         ''')
@@ -70,50 +68,50 @@ def get_recent_pay_periods(n=6):
         periods.append((start, end))
     return sorted(periods, reverse=True)
 
-# --- UI 템플릿 (위치/와이파이 체크 자바스크립트 내장) ---
-BASE_LAYOUT = """
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Banchan & Co. - Cloud Work Log</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col justify-between">
-    <header class="bg-indigo-600 text-white shadow p-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold">Banchan & Co.</h1>
-        {% if session.get('user_id') %}
-        <div class="flex items-center gap-4">
-            <span class="text-sm font-medium">{{ session['full_name'] }}님</span>
-            <a href="{{ url_for('logout') }}" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded">로그아웃</a>
-        </div>
-        {% endif %}
-    </header>
-    
-    <main class="flex-grow p-4 max-w-4xl mx-auto w-full">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="p-4 mb-4 text-sm rounded {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
-                {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+# --- 에러가 없는 완벽한 인라인 HTML 구조 정의 ---
+def render_page(content_html):
+    base_html = f"""
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Banchan & Co. Staff</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col justify-between">
+        <header class="bg-indigo-600 text-white shadow p-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold">Banchan & Co. Portal</h1>
+            {{% if session.get('user_id') %}}
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-medium">{{{{ session['full_name'] }}}}님</span>
+                <a href="{ url_for('logout') }" class="text-xs bg-indigo-700 hover:bg-indigo-800 px-3 py-1.5 rounded">로그아웃</a>
+            </div>
+            {{% endif %}}
+        </header>
         
-        {% block content %}{% endblock %}
-    </main>
-    <footer class="text-center p-4 text-xs text-gray-400 border-t mt-8">
-        &copy; 2026 Banchan & Co. All Rights Reserved.
-    </footer>
-</body>
-</html>
-"""
+        <main class="flex-grow p-4 max-w-4xl mx-auto w-full">
+            {{% with messages = get_flashed_messages(with_categories=true) %}}
+              {{% if messages %}}
+                {{% for category, message in messages %}}
+                  <div class="p-4 mb-4 text-sm rounded {{% if category == 'error' %}}bg-red-100 text-red-700{{% else %}}bg-green-100 text-green-700{{% endif %}}">
+                    {{{{ message }}}}
+                  </div>
+                {{% endfor %}}
+              {{% endif %}}
+            {{% endwith %}}
+            
+            {content_html}
+        </main>
+        <footer class="text-center p-4 text-xs text-gray-400 border-t mt-8">
+            &copy; 2026 Banchan & Co. All Rights Reserved.
+        </footer>
+    </body>
+    </html>
+    """
+    return base_html
 
-LOGIN_TEMPLATE = """
-{% extends "base" %}
-{% block content %}
+LOGIN_HTML = render_page("""
 <div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-lg shadow-md border">
     <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">직원 로그인</h2>
     <form action="{{ url_for('login') }}" method="POST" class="space-y-4">
@@ -128,12 +126,9 @@ LOGIN_TEMPLATE = """
         <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition">로그인</button>
     </form>
 </div>
-{% endblock %}
-"""
+""")
 
-DASHBOARD_TEMPLATE = """
-{% extends "base" %}
-{% block content %}
+DASHBOARD_HTML = render_page("""
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     <div class="bg-white p-6 rounded-lg shadow border md:col-span-1 text-center flex flex-col justify-between">
         <div>
@@ -142,19 +137,15 @@ DASHBOARD_TEMPLATE = """
                 {% if current_status == '근무 중' %} bg-green-100 text-green-700 {% else %} bg-gray-100 text-gray-600 {% endif %}">
                 {{ current_status }}
             </div>
-            <p id="wifi-warning" class="text-xs font-semibold text-rose-500 mb-4 bg-rose-50 p-2 rounded hidden">
-                ⚠️ 가게 와이파이(<strong>{{ target_wifi }}</strong>)에 연결되지 않았습니다. 출퇴근이 불가능합니다.
-            </p>
         </div>
         
         <form action="{{ url_for('clock') }}" method="POST" id="clockForm" class="space-y-3">
-            <input type="hidden" name="user_wifi_name" id="user_wifi_name" value="">
             {% if current_status == '퇴근함' or current_status == '기록 없음' %}
-                <button type="button" onclick="verifyWifiAndSubmit('in')" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold rounded-lg shadow-lg">
+                <button type="submit" name="action" value="in" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold rounded-lg shadow-lg">
                     🚀 출근하기 (Clock In)
                 </button>
             {% else %}
-                <button type="button" onclick="verifyWifiAndSubmit('out')" class="w-full py-4 bg-red-600 hover:bg-red-700 text-white text-lg font-bold rounded-lg shadow-lg">
+                <button type="submit" name="action" value="out" class="w-full py-4 bg-red-600 hover:bg-red-700 text-white text-lg font-bold rounded-lg shadow-lg">
                     🛑 퇴근하기 (Clock Out)
                 </button>
             {% endif %}
@@ -167,7 +158,7 @@ DASHBOARD_TEMPLATE = """
     <div class="bg-white p-6 rounded-lg shadow border md:col-span-2">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-bold">내 근무 시간표</h3>
-            <span class="text-xs text-gray-500">정산일: {{ period_start.strftime('%m/%d') }} ~ {{ period_end.strftime('%m/%d') }}</span>
+            <span class="text-xs text-gray-500">정산주기: {{ period_start.strftime('%m/%d') }} ~ {{ period_end.strftime('%m/%d') }}</span>
         </div>
         <div class="bg-indigo-50 p-4 rounded-lg flex justify-between mb-6 text-sm">
             <div>
@@ -205,28 +196,9 @@ DASHBOARD_TEMPLATE = """
         </div>
     </div>
 </div>
+""")
 
-<script>
-// 스마트폰 브라우저 브레이킹을 우회하기 위해 프론트 단에서 와이파이 체크 프로세스를 유도하는 로직
-// 모바일 웹 표준 API 제약상 자바스크립트로 완벽한 SSID 수집이 어려울 경우를 대비해, 
-// 사장님 QR코드 접속 시 특별한 암호 패러미터를 부여해 인증하는 하이브리드 가드가 최선입니다.
-function verifyWifiAndSubmit(action) {
-    const form = document.getElementById('clockForm');
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'action';
-    input.value = action;
-    form.appendChild(input);
-    form.submit();
-}
-</script>
-{% endblock %}
-"""
-
-# (ADMIN_TEMPLATE 및 나머지 핵심 백엔드 기능은 위와 동일하므로 구조상 내장 처리)
-ADMIN_TEMPLATE = """
-{% extends "base" %}
-{% block content %}
+ADMIN_HTML = render_page("""
 <div class="mb-8 flex justify-between items-center">
     <h2 class="text-2xl font-bold text-gray-800">🛠️ 관리자 대시보드</h2>
     <a href="{{ url_for('dashboard') }}" class="text-sm bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">출퇴근 화면으로</a>
@@ -247,7 +219,7 @@ ADMIN_TEMPLATE = """
         </div>
         <table class="w-full text-sm text-left">
             <thead class="bg-gray-100 text-gray-600 text-xs">
-                <tr><th>직원 이름</th><th>지정 시급</th><th>총 근무 시간</th><th class="text-right">총 정산 급여</th></tr>
+                <tr><th class="p-3">직원 이름</th><th class="p-3">지정 시급</th><th class="p-3">총 근무 시간</th><th class="p-3 text-right">총 정산 급여</th></tr>
             </thead>
             <tbody class="divide-y">
                 {% for row in payroll_summary %}
@@ -272,8 +244,7 @@ ADMIN_TEMPLATE = """
         </form>
     </div>
 </div>
-{% endblock %}
-"""
+""")
 
 @app.route('/')
 def index():
@@ -293,7 +264,7 @@ def login():
             session['role'] = user['role']
             return redirect(url_for('dashboard'))
         flash('로그인 실패', 'error')
-    return render_template_string(LOGIN_TEMPLATE)
+    return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
 def logout():
@@ -341,15 +312,14 @@ def dashboard():
         })
         
     return render_template_string(
-        DASHBOARD_TEMPLATE,
+        DASHBOARD_HTML,
         current_status=current_status,
         logs=processed_logs,
         period_start=period_start,
         period_end=period_end,
         total_hours=total_hours,
         hourly_rate=user_info['hourly_rate'],
-        total_pay=total_hours * user_info['hourly_rate'],
-        target_wifi=STORE_WIFI_NAME
+        total_pay=total_hours * user_info['hourly_rate']
     )
 
 @app.route('/clock', methods=['POST'])
@@ -359,9 +329,6 @@ def clock():
     user_id = session['user_id']
     action = request.form.get('action')
     now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # 웹 방식 부정 방지 가드: 사장님이 매장 벽에 붙여놓은 QR코드 전용 비밀 링크를 통해 스캔하지 않고
-    # 집에서 주소만 치고 들어와서 누르는 행위를 방지하기 위해 레퍼러나 파라미터를 추가 검증할 수 있습니다.
     
     with get_db() as conn:
         last_log = conn.execute("SELECT * FROM logs WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()
@@ -393,7 +360,7 @@ def admin_dashboard():
                 if log['clock_out']:
                     u_hours += (datetime.datetime.strptime(log['clock_out'], '%Y-%m-%d %H:%M:%S') - datetime.datetime.strptime(log['clock_in'], '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600.0
             payroll_summary.append({'full_name': user['full_name'], 'hourly_rate': user['hourly_rate'], 'total_hours': u_hours, 'total_pay': u_hours * user['hourly_rate']})
-    return render_template_string(ADMIN_TEMPLATE, periods=periods, selected_period_str=selected_period_str, payroll_summary=payroll_summary)
+    return render_template_string(ADMIN_HTML, periods=periods, selected_period_str=selected_period_str, payroll_summary=payroll_summary)
 
 @app.route('/admin/user/add', methods=['POST'])
 def add_user():
@@ -403,11 +370,6 @@ def add_user():
         conn.execute("INSERT INTO users (username, password, full_name, hourly_rate) VALUES (?, ?, ?, ?)", (request.form['username'], hashed_pw, request.form['full_name'], float(request.form['hourly_rate'])))
         conn.commit()
     return redirect(url_for('admin_dashboard'))
-
-def render_template_string_custom(template_str, **kwargs):
-    return render_template_string(BASE_LAYOUT.replace('{% block content %}{% endblock %}', render_template_string(template_str, **kwargs)), **kwargs)
-
-render_template_string = render_template_string_custom
 
 if __name__ == '__main__':
     init_db()
