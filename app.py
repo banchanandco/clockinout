@@ -49,6 +49,10 @@ def init_db():
             )
         conn.commit()
 
+# ⭐ Render 환경에서 앱이 시작할 때 무조건 DB와 테이블을 먼저 만들도록 강제 설정
+with app.app_context():
+    init_db()
+
 def get_pay_period_range(date_obj):
     if isinstance(date_obj, datetime.datetime):
         date_obj = date_obj.date()
@@ -68,7 +72,6 @@ def get_recent_pay_periods(n=6):
         periods.append((start, end))
     return sorted(periods, reverse=True)
 
-# --- 컨텍스트 에러를 원천 차단하는 베이스 레이아웃 함수 ---
 def get_base_layout(content_html):
     return f"""
     <!DOCTYPE html>
@@ -127,7 +130,7 @@ def login():
             session['full_name'] = user['full_name']
             session['role'] = user['role']
             return redirect(url_for('dashboard'))
-        flash('로그인 실패', 'error')
+        flash('로그인 실패: 아이디 또는 비밀번호를 확인하세요.', 'error')
         
     login_html = """
     <div class="max-w-md mx-auto mt-12 bg-white p-8 rounded-lg shadow-md border">
@@ -375,5 +378,4 @@ def add_user():
     return redirect(url_for('admin_dashboard'))
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True)
