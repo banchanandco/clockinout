@@ -10,7 +10,7 @@ DB_FILE = 'clock_system.db'
 
 # 📍 [필수 변경] 사장님 가게의 와이파이 이름을 정확하게 입력하세요 (대소문자 구분)
 # 직원이 이 와이파이에 연결되어 있을 때만 출퇴근이 가능해집니다.
-STORE_WIFI_NAME = "Banchan_Co_5G" 
+STORE_WIFI_NAME = "home_5G" 
 
 # 2주 정산 기준점: 2026년 1월 7일 (수요일)
 ANCHOR_DATE = datetime.date(2026, 1, 7)
